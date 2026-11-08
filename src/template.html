@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>彷徨 — SAMAYOI</title>
+<style>
+html,body{margin:0;height:100%;background:#000;overflow:hidden;color:#cfc8b8;font-family:"Hiragino Mincho ProN","Yu Mincho","YuMincho","Noto Serif JP","Noto Serif CJK JP",serif;user-select:none;-webkit-user-select:none;touch-action:none}
+#game canvas{display:block}
+#grain{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;opacity:.12;mix-blend-mode:overlay}
+#vig{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 50%,rgba(0,0,0,0) 38%,rgba(0,0,0,.94) 100%)}
+#blood{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 50%,rgba(80,0,0,0) 42%,rgba(110,0,0,.9) 100%);opacity:0}
+#keysHud{position:fixed;left:20px;top:16px;font-size:14px;letter-spacing:.25em;opacity:.6;pointer-events:none;text-shadow:0 0 6px #000}
+#bars{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);width:160px;pointer-events:none;opacity:.45}
+.bar{height:2px;background:rgba(255,255,255,.1);margin-top:6px}.bar i{display:block;height:100%;background:#d8d2c0;width:100%}
+#batt{background:#a8b890!important}
+#msg{position:fixed;left:0;right:0;top:63%;text-align:center;font-size:21px;letter-spacing:.5em;opacity:0;transition:opacity .8s;pointer-events:none;text-shadow:0 0 12px #000}
+#msg.red{color:#b10000;font-size:52px;transition:opacity .15s;letter-spacing:.8em}
+#scare{position:fixed;inset:-20px;width:calc(100% + 40px);height:calc(100% + 40px);display:none;z-index:60;background:#000}
+.ov{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#000;z-index:40;text-align:center;padding:20px;box-sizing:border-box}
+#title{background:radial-gradient(ellipse at 50% 60%,rgba(0,0,0,.55),#000 75%)}
+#title h1{font-size:clamp(48px,11vw,84px);letter-spacing:.45em;margin:0 0 8px .45em;font-weight:400;color:#d6cebe;animation:fl 7s infinite;text-shadow:0 0 30px rgba(120,0,0,.5)}
+@keyframes fl{0%,100%{opacity:.9}46%{opacity:.9}47%{opacity:.15}48%{opacity:.85}49%{opacity:.2}51%{opacity:.9}}
+.sub{letter-spacing:.7em;font-size:11px;opacity:.45;margin-bottom:38px;font-family:serif}
+.desc{font-size:15px;line-height:2.3;letter-spacing:.15em;opacity:.8;margin-bottom:26px}
+.ctrl{font-size:12px;opacity:.42;line-height:2;letter-spacing:.1em;margin-bottom:34px;font-family:sans-serif}
+button{background:none;border:1px solid #6b1010;color:#d8c8b8;padding:14px 48px;font:inherit;font-size:18px;letter-spacing:.6em;cursor:pointer;text-indent:.6em}
+button:hover{background:#250404;border-color:#a01515}
+.warn{margin-top:30px;font-size:11px;opacity:.38;letter-spacing:.2em;line-height:2}
+#end{display:none}
+#endT{font-size:clamp(34px,8vw,56px);font-weight:400;letter-spacing:.5em;color:#a00;margin:0 0 22px .5em}
+#endS{font-size:13px;opacity:.55;letter-spacing:.2em;margin-bottom:40px;font-family:sans-serif}
+#pause{display:none;background:rgba(0,0,0,.75);cursor:pointer;letter-spacing:.4em;font-size:16px}
+#touch{position:fixed;inset:0;display:none;z-index:10}
+.tbtn{position:absolute;width:76px;height:76px;border-radius:50%;border:1px solid rgba(255,255,255,.22);color:rgba(255,255,255,.5);display:flex;align-items:center;justify-content:center;font-size:20px;background:rgba(0,0,0,.2)}
+#bRun{right:26px;bottom:44px}#bLight{right:118px;bottom:24px;width:56px;height:56px;font-size:16px}
+#slits{position:fixed;inset:0;pointer-events:none;display:none;z-index:5;--bar:15px;--win:48vw}
+#slits .w{position:absolute;left:50%;top:47%;width:var(--win);height:30vh;transform:translate(-50%,-50%);box-shadow:0 0 0 200vmax #020202,inset 0 0 40px 14px #020202;background:repeating-linear-gradient(to bottom,#020202 0,#020202 var(--bar),rgba(0,0,0,0) var(--bar),rgba(0,0,0,0) 26px);transition:width .1s}
+#slits .rim{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 47%,rgba(0,0,0,0) 30%,rgba(0,0,0,.35) 60%)}
+#prompt{position:fixed;left:0;right:0;bottom:56px;text-align:center;font-size:13px;letter-spacing:.25em;opacity:.65;pointer-events:none;font-family:sans-serif;text-shadow:0 0 6px #000;z-index:6}
+#bHide{right:26px;bottom:140px;display:none;border-color:rgba(180,40,40,.6)}#bBreath{left:26px;bottom:44px;display:none}#bPeek{left:118px;bottom:44px;display:none}
+#knob{position:absolute;width:110px;height:110px;border-radius:50%;border:1px solid rgba(255,255,255,.16);display:none;pointer-events:none}
+#knob i{position:absolute;left:35px;top:35px;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.14)}
+</style>
+</head>
+<body>
+<div id="game"></div>
+<canvas id="grain"></canvas>
+<div id="vig"></div>
+<div id="blood"></div>
+<div id="keysHud">札　□□□□□</div>
+<div id="bars"><div class="bar"><i id="stam"></i></div><div class="bar"><i id="batt"></i></div><div class="bar" id="airB" style="display:none"><i id="air"></i></div></div>
+<div id="slits"><div class="w"></div><div class="rim"></div></div>
+<div id="prompt"></div>
+<div id="msg"></div>
+<div id="touch"><div id="knob"><i></i></div><div class="tbtn" id="bRun">走</div><div class="tbtn" id="bLight">灯</div><div class="tbtn" id="bHide">隠</div><div class="tbtn" id="bBreath">息</div><div class="tbtn" id="bPeek">覗</div></div>
+<canvas id="scare"></canvas>
+<div id="pause" class="ov">クリックで再開</div>
+<div id="end" class="ov"><h2 id="endT"></h2><div id="endS"></div><button id="retry">もう一度</button></div>
+<div id="title" class="ov">
+  <h1>彷徨</h1>
+  <div class="sub">S A M A Y O I</div>
+  <div class="desc">迷宮のどこかに貼られた お札を五枚 剥がし、<br>出口の扉から 逃げ出せ。<br>アレは 歩いている。 ずっと。<br>見つかったら ── 走れ。　逃げきれないなら ── 隠れろ。</div>
+  <div class="ctrl">WASD 移動 ／ マウス 視点 ／ Shift 走る ／ F 懐中電灯 ／ E ロッカーに隠れる<br>隠れている間：Space 息を止める ／ Q・右クリック 覗く<br>スマホ：左で移動・右で視点・「走」「灯」「隠」「息」「覗」ボタン</div>
+  <button id="start">はいる</button>
+  <div class="warn">ヘッドホン推奨 ── 足音の方向が分かる<br>部屋を暗くして 音量は少し大きめに<br>※ 強い点滅と大きな音があります</div>
+</div>
+<script>/*GAME*/</script>
+</body>
+</html>

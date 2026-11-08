@@ -1,0 +1,1 @@
+{ "name": "samayoi", "private": true, "scripts": { "build": "bash build.sh" }, "dependencies": { "three": "^0.170.0", "esbuild": "^0.24.0" } }
