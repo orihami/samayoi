@@ -10,7 +10,8 @@ const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const $ = (id) => document.getElementById(id);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-const lerpAngle = (a, b, t) => { let d = ((b - a + Math.PI) % (Math.PI * 2)) - Math.PI; if (d < -Math.PI) d += Math.PI * 2; return a + d * t; };
+const wrapA = (a) => a - Math.PI * 2 * Math.floor((a + Math.PI) / (Math.PI * 2));
+const lerpAngle = (a, b, t) => a + wrapA(b - a) * t;
 
 // ===================== MAZE =====================
 let grid = [];
@@ -1368,6 +1369,7 @@ function ambush() {
 // ===================== MAIN UPDATE =====================
 function update(dt) {
   game.t += dt;
+  player.yaw = wrapA(player.yaw);
   for (let i = game.timers.length - 1; i >= 0; i--) if (game.timers[i].t <= game.t) { const tm = game.timers.splice(i, 1)[0]; tm.fn(); }
   const hid = player.hidden;
 
@@ -1414,8 +1416,7 @@ function update(dt) {
       const wantPeek = (keys.KeyQ || keys.mouseR || input.peek) ? 1 : 0;
       player.peek += (wantPeek - player.peek) * (1 - Math.exp(-dt * 6));
       player.pitch = clamp(player.pitch, -0.3, 0.3);
-      const dy = ((player.yaw - player.baseYaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
-      player.yaw = player.baseYaw + clamp(dy, -0.4, 0.4);
+      player.yaw = player.baseYaw + clamp(wrapA(player.yaw - player.baseYaw), -0.4, 0.4);
     }
     if (hid) {
       // 入る/出るアニメーション
@@ -1429,7 +1430,7 @@ function update(dt) {
         player.hideAnim = Math.max(0, player.hideAnim - dt / 0.5);
         const k = 1 - player.hideAnim;
         player.pos.lerpVectors(hid.inside, hid.front, k); player.pos.y = 0;
-        if (player.hideAnim <= 0) { player.hidden = null; player.light = player.lightWas && player.battery > 0; player.yaw = player.baseYaw; later(0.4, () => { hid.target = 0; clank(A.master, 0.25, 0.6); }); }
+        if (player.hideAnim <= 0) { player.hidden = null; player.light = player.lightWas && player.battery > 0; later(0.4, () => { hid.target = 0; clank(A.master, 0.25, 0.6); }); }
       }
     }
     updateStalker(dt);
@@ -1465,7 +1466,7 @@ function update(dt) {
       const seen = (tx * cf.x + tz * cf.z) / tl > 0.55 && tl < 16 && lineClear(camera.position, _v);
       if (!seen) {
         const want = Math.atan2(camera.position.x - _v.x, camera.position.z - _v.z) - dl.g.rotation.y;
-        dl.head.rotation.y = clamp(((want + Math.PI * 3) % (Math.PI * 2)) - Math.PI, -2.6, 2.6);
+        dl.head.rotation.y = clamp(wrapA(want), -2.6, 2.6);
         dl.head.rotation.z = 0.35;
       }
       dl.seen = seen;
@@ -1705,15 +1706,25 @@ addEventListener('mousedown', (e) => {
 });
 addEventListener('mouseup', (e) => { if (e.button === 2) keys.mouseR = false; else mouseDown = false; });
 function tryLock() {
-  try { const r = renderer.domElement.requestPointerLock(); if (r && r.catch) r.catch(() => { if (!game.noLock) { game.noLock = true; showMsg('ドラッグで視点を動かせます', 3); } }); }
-  catch (e) { game.noLock = true; }
+  const fail = () => { if (!game.noLock) { game.noLock = true; showMsg('ドラッグで視点を動かせます', 3); } };
+  const plain = () => { try { const r = renderer.domElement.requestPointerLock(); if (r && r.catch) r.catch(fail); } catch (e) { fail(); } };
+  try {
+    // OSのマウス加速を通さない生の値を使う（Chromeの視点飛びを防ぐ）
+    const r = renderer.domElement.requestPointerLock({ unadjustedMovement: true });
+    if (r && r.catch) r.catch(plain); else if (!r) {}
+  } catch (e) { plain(); }
 }
+let lockAt = 0;
 addEventListener('mousemove', (e) => {
   if (game.state !== 'play' || !(document.pointerLockElement || (game.noLock && mouseDown))) return;
-  player.yaw -= e.movementX * 0.0022; player.pitch = clamp(player.pitch - e.movementY * 0.0022, -1.3, 1.3);
+  let mx = e.movementX || 0, my = e.movementY || 0;
+  // ロック直後の1発目と、明らかに異常な跳ね値は捨てる
+  if (performance.now() - lockAt < 120) return;
+  if (Math.abs(mx) > 250 || Math.abs(my) > 250) return;
+  player.yaw = wrapA(player.yaw - mx * 0.0022); player.pitch = clamp(player.pitch - my * 0.0022, -1.3, 1.3);
 });
 document.addEventListener('pointerlockchange', () => {
-  if (document.pointerLockElement) { game.hadLock = true; return; }
+  if (document.pointerLockElement) { game.hadLock = true; lockAt = performance.now(); return; }
   if (game.hadLock && game.state === 'play' && !isTouch) { game.paused = true; $('pause').style.display = 'flex'; AC && AC.suspend(); }
 });
 $('pause').addEventListener('click', () => { tryLock(); game.paused = false; $('pause').style.display = 'none'; AC && AC.resume(); });
@@ -1736,7 +1747,8 @@ if (isTouch) {
         const dx = clamp((t.clientX - joy.ox) / 50, -1, 1), dy = clamp((t.clientY - joy.oy) / 50, -1, 1);
         input.r = dx; input.f = -dy; knob.firstElementChild.style.transform = `translate(${dx * 35}px,${dy * 35}px)`;
       } else if (t.identifier === look.id && game.state === 'play') {
-        player.yaw -= (t.clientX - look.lx) * 0.006; player.pitch = clamp(player.pitch - (t.clientY - look.ly) * 0.006, -1.3, 1.3);
+        const tdx = t.clientX - look.lx, tdy = t.clientY - look.ly;
+        if (Math.abs(tdx) < 160 && Math.abs(tdy) < 160) { player.yaw = wrapA(player.yaw - tdx * 0.006); player.pitch = clamp(player.pitch - tdy * 0.006, -1.3, 1.3); }
         look.lx = t.clientX; look.ly = t.clientY;
       }
     }
