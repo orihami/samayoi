@@ -38,6 +38,8 @@ button:hover{background:#250404;border-color:#a01515}
 #slits .w{position:absolute;left:50%;top:47%;width:var(--win);height:30vh;transform:translate(-50%,-50%);box-shadow:0 0 0 200vmax #020202,inset 0 0 40px 14px #020202;background:repeating-linear-gradient(to bottom,#020202 0,#020202 var(--bar),rgba(0,0,0,0) var(--bar),rgba(0,0,0,0) 26px);transition:width .1s}
 #slits .rim{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 47%,rgba(0,0,0,0) 30%,rgba(0,0,0,.35) 60%)}
 #prompt{position:fixed;left:0;right:0;bottom:56px;text-align:center;font-size:13px;letter-spacing:.25em;opacity:.65;pointer-events:none;font-family:sans-serif;text-shadow:0 0 6px #000;z-index:6}
+#prompt.hot{color:#d23a2a;opacity:1;font-size:15px}
+#guide{position:fixed;left:0;right:0;bottom:22%;text-align:center;font-size:15px;letter-spacing:.22em;opacity:0;transition:opacity .6s;pointer-events:none;text-shadow:0 0 10px #000,0 0 3px #000;z-index:6;color:#e0d8c8;padding:0 20px}
 #bHide{right:26px;bottom:140px;display:none;border-color:rgba(180,40,40,.6)}#bBreath{left:26px;bottom:44px;display:none}#bPeek{left:118px;bottom:44px;display:none}
 #knob{position:absolute;width:110px;height:110px;border-radius:50%;border:1px solid rgba(255,255,255,.16);display:none;pointer-events:none}
 #knob i{position:absolute;left:35px;top:35px;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.14)}
@@ -52,6 +54,7 @@ button:hover{background:#250404;border-color:#a01515}
 <div id="bars"><div class="bar"><i id="stam"></i></div><div class="bar"><i id="batt"></i></div><div class="bar" id="airB" style="display:none"><i id="air"></i></div></div>
 <div id="slits"><div class="w"></div><div class="rim"></div></div>
 <div id="prompt"></div>
+<div id="guide"></div>
 <div id="msg"></div>
 <div id="touch"><div id="knob"><i></i></div><div class="tbtn" id="bRun">走</div><div class="tbtn" id="bLight">灯</div><div class="tbtn" id="bHide">隠</div><div class="tbtn" id="bBreath">息</div><div class="tbtn" id="bPeek">覗</div></div>
 <canvas id="scare"></canvas>

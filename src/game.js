@@ -33,14 +33,29 @@ function genMaze() {
     if (grid[y][x] === 1 && ((x % 2 === 0 && y % 2 === 1) || (x % 2 === 1 && y % 2 === 0))) { grid[y][x] = 0; made++; }
   }
 }
+let SX = 1, SY = 1;
+function pickStart() {
+  const cx = (GW - 1) / 2, cy = (GH - 1) / 2, a = rand(0, Math.PI * 2), r = rand(3, 5.5);
+  SX = clamp(Math.round(cx + Math.cos(a) * r) | 1, 3, GW - 4); SY = clamp(Math.round(cy + Math.sin(a) * r) | 1, 3, GH - 4);
+  // 柱のある小部屋＋四方に出口
+  for (let y = SY - 2; y <= SY + 2; y++) for (let x = SX - 2; x <= SX + 2; x++) grid[y][x] = 0;
+  for (const [px, py] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) grid[SY + py][SX + px] = 1;
+  for (const [dx, dy] of DIRS) { const x = SX + dx * 3, y = SY + dy * 3; if (x > 0 && y > 0 && x < GW - 1 && y < GH - 1) grid[y][x] = 0; }
+}
+function braid(p) {
+  for (let y = 1; y < GH - 1; y += 2) for (let x = 1; x < GW - 1; x += 2) {
+    if (grid[y][x] !== 0) continue;
+    const walls = DIRS.filter(([dx, dy]) => grid[y + dy][x + dx] === 1 && x + dx * 2 > 0 && y + dy * 2 > 0 && x + dx * 2 < GW - 1 && y + dy * 2 < GH - 1);
+    if (DIRS.filter(([dx, dy]) => grid[y + dy][x + dx] === 1).length === 3 && walls.length && Math.random() < p) { const [dx, dy] = pick(walls); grid[y + dy][x + dx] = 0; }
+  }
+}
 const halls = [];
 function carveHalls(n) {
   let tries = 0;
   while (halls.length < n && tries++ < 400) {
     const x0 = 1 + 2 * ((Math.random() * (CW - 2)) | 0), y0 = 1 + 2 * ((Math.random() * (CH - 2)) | 0);
     if (x0 + 4 > GW - 2 || y0 + 4 > GH - 2) continue;
-    if (x0 < 7 && y0 < 7) continue;
-    if (x0 + 4 > GW - 7 && y0 + 4 > GH - 7) continue;
+    if (Math.abs(x0 + 2 - SX) < 8 && Math.abs(y0 + 2 - SY) < 8) continue;
     if (halls.some((h) => Math.abs(h.x - x0) < 9 && Math.abs(h.y - y0) < 9)) continue;
     for (let y = y0; y <= y0 + 4; y++) for (let x = x0; x <= x0 + 4; x++) grid[y][x] = 0;
     for (const [px, py] of [[1, 1], [3, 1], [1, 3], [3, 3]]) grid[y0 + py][x0 + px] = 1;
@@ -428,10 +443,15 @@ const dust = new THREE.Points(dustGeo, dustMat); camera.add(dust);
 
 // ===================== WORLD BUILD =====================
 genMaze();
+braid(0.45);
+pickStart();
 carveHalls(3);
 const openCells = [];
 for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) if (!wallAt(x, y)) openCells.push([x, y]);
-const startDist = bfs(1, 1).dist;
+const startDist = bfs(SX, SY).dist;
+const SD = (x, y) => startDist[y * GW + x];
+const EXITC = [[1, 1], [GW - 2, 1], [1, GH - 2], [GW - 2, GH - 2]].sort((a, b) => SD(b[0], b[1]) - SD(a[0], a[1]))[0];
+
 let maxDist = 0; for (const v of startDist) maxDist = Math.max(maxDist, v);
 const zoneOf = (x, y) => { const d = startDist[y * GW + x]; if (d < 0) return 0; const r = d / maxDist; return r < 0.34 ? 0 : r < 0.67 ? 1 : 2; };
 const zoneW = (wx, wz) => { const [x, y] = [Math.round(wx / S), Math.round(wz / S)]; if (!wallAt(x, y)) return zoneOf(x, y); for (const [dx, dy] of DIRS) if (!wallAt(x + dx, y + dy)) return zoneOf(x + dx, y + dy); return 0; };
@@ -500,7 +520,7 @@ const ZONE = [
 // 裸電球
 const bulbs = [];
 {
-  const cand = openCells.filter(([x, y]) => x + y > 6 && x % 2 === 1 && y % 2 === 1);
+  const cand = openCells.filter(([x, y]) => SD(x, y) > 5 && x % 2 === 1 && y % 2 === 1);
   for (let i = 0; i < 7 && cand.length; i++) {
     const [x, y] = cand.splice((Math.random() * cand.length) | 0, 1)[0];
     const z = zoneOf(x, y);
@@ -620,10 +640,10 @@ halls.forEach((h, i) => {
     place(bed(true), cx + S * 2, cz + S * 2 - 0.3, Math.PI / 2, 0.48, 1.0);
   }
 });
-if (!radioPos) { const [x, y] = pick(openCells.filter(([x, y]) => x > 8 || y > 8)); place(radioProp(), x * S, y * S, 0, 0.65, 0.38); radioPos = new THREE.Vector3(x * S, 0.9, y * S); }
+if (!radioPos) { const [x, y] = pick(openCells.filter(([x, y]) => SD(x, y) > 10)); place(radioProp(), x * S, y * S, 0, 0.65, 0.38); radioPos = new THREE.Vector3(x * S, 0.9, y * S); }
 // 廊下の段ボールなど
 for (let i = 0; i < 10; i++) {
-  const [x, y] = pick(openCells); if (x + y < 4) continue;
+  const [x, y] = pick(openCells); if (SD(x, y) < 4) continue;
   const side = DIRS.find(([dx, dy]) => wallAt(x + dx, y + dy)); if (!side) continue;
   const z = zoneOf(x, y);
   const obj = z === 1 ? ivStand() : z === 2 ? crates() : chair();
@@ -647,7 +667,7 @@ function makeDoll() {
 }
 for (let i = 0; i < 9; i++) {
   const cand = pick(openCells); const [x, y] = cand;
-  if (x + y < 5 || zoneOf(x, y) === 2) continue;
+  if (SD(x, y) < 6 || zoneOf(x, y) === 2) continue;
   const side = DIRS.find(([dx, dy]) => wallAt(x + dx, y + dy)); if (!side) continue;
   const d = makeDoll();
   d.g.position.set(x * S + side[0] * 1.25, 0, y * S + side[1] * 1.25);
@@ -677,7 +697,7 @@ function addItem(type, x, y) {
 }
 {
   const dist = startDist;
-  const dead = openCells.filter(([x, y]) => x % 2 === 1 && y % 2 === 1 && DIRS.filter(([dx, dy]) => wallAt(x + dx, y + dy)).length === 3 && !(x === GW - 2 && y === GH - 2) && dist[y * GW + x] > 8);
+  const dead = openCells.filter(([x, y]) => x % 2 === 1 && y % 2 === 1 && DIRS.filter(([dx, dy]) => wallAt(x + dx, y + dy)).length === 3 && !(x === EXITC[0] && y === EXITC[1]) && dist[y * GW + x] > 8);
   dead.sort((a, b) => dist[b[1] * GW + b[0]] - dist[a[1] * GW + a[0]]);
   const chosen = [];
   for (const c of dead) { if (chosen.every((o) => Math.abs(o[0] - c[0]) + Math.abs(o[1] - c[1]) > 8)) chosen.push(c); if (chosen.length === 5) break; }
@@ -687,12 +707,13 @@ function addItem(type, x, y) {
   for (let i = 0; i < 5; i++) { const [x, y] = odd.splice((Math.random() * odd.length) | 0, 1)[0]; addItem('battery', x, y); }
 }
 
-// 出口の扉
-const EXIT = { x: (GW - 1) * S - S / 2, z: (GH - 2) * S };
+// 出口の扉（スタートから一番遠い角）
+const EXSIDE = EXITC[0] === 1 ? -1 : 1;
+const EXIT = { x: EXSIDE > 0 ? (GW - 1) * S - S / 2 : S / 2, z: EXITC[1] * S };
 const door = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 2.6), new THREE.MeshStandardMaterial({ map: tex(doorCanvas()), roughness: 0.7, metalness: 0.3 }));
-door.position.set(EXIT.x - 0.02, 1.3, EXIT.z); door.rotation.y = -Math.PI / 2; scene.add(door);
+door.position.set(EXIT.x - EXSIDE * 0.02, 1.3, EXIT.z); door.rotation.y = -EXSIDE * Math.PI / 2; scene.add(door);
 const exitLight = new THREE.PointLight(0xa8c0ff, 0, 7, 1.6);
-exitLight.position.set(EXIT.x - 1.0, 2.4, EXIT.z); scene.add(exitLight);
+exitLight.position.set(EXIT.x - EXSIDE * 1.0, 2.4, EXIT.z); scene.add(exitLight);
 
 // ===================== LOCKERS =====================
 const lockerBodyTex = tex(lockerCanvas(false));
@@ -711,7 +732,7 @@ function makeLocker(num) {
   return { g, pivot, open: 0, target: 0 };
 }
 {
-  const cand = openCells.filter(([x, y]) => (x + y > 3) && !(x === GW - 2 && y === GH - 2) && !items.some((it) => Math.round(it.x / S) === x && Math.round(it.z / S) === y));
+  const cand = openCells.filter(([x, y]) => SD(x, y) > 3 && !(x === EXITC[0] && y === EXITC[1]) && !items.some((it) => Math.round(it.x / S) === x && Math.round(it.z / S) === y));
   let groups = 0, num = 1;
   const used = new Set();
   for (let tries = 0; tries < 600 && groups < 11; tries++) {
@@ -993,9 +1014,9 @@ function musicNote(semi) {
 }
 
 // ===================== PLAYER =====================
-const player = { pos: new THREE.Vector3(S, 0, S), yaw: 0, pitch: 0, stamina: 1, exhausted: false, battery: 1, light: true, keys: 0, stepAcc: 0, sprinting: false, moving: false, bob: 0, eye: 1.62,
+const player = { pos: new THREE.Vector3(SX * S, 0, SY * S), yaw: 0, pitch: 0, stamina: 1, exhausted: false, battery: 1, light: true, keys: 0, stepAcc: 0, sprinting: false, moving: false, bob: 0, eye: 1.62,
   hidden: null, hideT: 0, hideAnim: 0, hideDir: 0, air: 1, holding: false, peek: 0, lightWas: true, baseYaw: 0, fromPos: new THREE.Vector3(), fromYaw: 0, choking: false };
-player.yaw = !wallAt(2, 1) ? -Math.PI / 2 : Math.PI;
+player.yaw = pick([0, Math.PI / 2, Math.PI, -Math.PI / 2]);
 const input = { f: 0, r: 0, sprint: false, breath: false, peek: false };
 const keys = {};
 
@@ -1011,7 +1032,17 @@ const st = { pos: new THREE.Vector3(), state: 'wander', path: [], repath: 0, las
 const game = { state: 'title', t: 0, paused: false, firstSeen: false, stingCD: 0, moanT: 5, whisperT: rand(25, 45), knockT: rand(35, 55), phantomT: rand(50, 80), scareT: 0, scareKind: '', unlocked: false, timers: [], fear: 0, shake: 0, hbT: 0, phantomVis: 0, lightsOut: false, screamed: false, winT: 0, ended: false, blackout: 0,
   susp: 0, zone: 0, zoneSeen: [true, false, false], dollT: rand(30, 50), corpse: null };
 function later(sec, fn) { game.timers.push({ t: game.t + sec, fn }); }
-let msgTO = 0;
+let msgTO = 0, guideTO = 0;
+const guideSeen = {};
+function showGuide(text, dur) {
+  const g = $('guide'); g.textContent = text; g.style.opacity = 1;
+  clearTimeout(guideTO); guideTO = setTimeout(() => (g.style.opacity = 0), dur * 1000);
+}
+// 場面に応じた操作ガイド（cd 秒は同じものを出さない）
+function G(key, pc, touch, dur = 4, cd = Infinity) {
+  const t = game.t; if (guideSeen[key] !== undefined && t - guideSeen[key] < cd) return;
+  guideSeen[key] = t; showGuide(isTouch ? touch : pc, dur);
+}
 function showMsg(text, dur = 3, red = false) {
   const m = $('msg'); m.textContent = text; m.className = red ? 'red' : ''; m.style.opacity = 1;
   clearTimeout(msgTO); msgTO = setTimeout(() => (m.style.opacity = 0), dur * 1000);
@@ -1058,6 +1089,7 @@ function navTo(tx, tz, speed, dt) {
 }
 function wanderGoal() {
   const [px, py] = toCell(player.pos);
+  if (game.t < 45) { for (let i = 0; i < 60; i++) { const c = pick(openCells); if (Math.abs(c[0] - px) + Math.abs(c[1] - py) > 14) return new THREE.Vector3(c[0] * S, 0, c[1] * S); } }
   for (let i = 0; i < 40; i++) { const c = pick(openCells); if (Math.abs(c[0] - px) + Math.abs(c[1] - py) < 12 || i > 35) return new THREE.Vector3(c[0] * S, 0, c[1] * S); }
   return st.pos.clone();
 }
@@ -1076,7 +1108,7 @@ function updateStalker(dt) {
   const k = player.keys;
   const chaseSpeed = Math.min(3.55 + 0.2 * k, 4.6);
   if ((st.state === 'wander' || st.state === 'hunt') && !hid) {
-    const loud = player.sprinting ? 17 : player.moving ? 4.5 : 0;
+    const loud = (player.sprinting ? 17 : player.moving ? 4.5 : 0) * (game.t < 30 ? 0.5 : 1);
     if (d < loud) { st.lastKnown.copy(pp); if (st.state === 'wander') { st.state = 'hunt'; st.repath = 0; st.path = []; } }
   }
   // 隠れているときの音
@@ -1190,7 +1222,7 @@ function updateStalker(dt) {
     if (d < 9 && !st.silent) game.shake = Math.max(game.shake, (1 - d / 9) * (st.state === 'chase' ? 0.5 : 0.25));
   }
   if (!los) st.unseenT += dt; else st.unseenT = 0;
-  if (st.state === 'wander' && st.unseenT > 20 && d > 26 && !hid) { relocate(7, 11, true); st.unseenT = 0; st.goal.copy(wanderGoal()); }
+  if (st.state === 'wander' && st.unseenT > 20 && d > 26 && !hid && game.t > 70) { relocate(7, 11, true); st.unseenT = 0; st.goal.copy(wanderGoal()); }
   if (d < 0.95 && game.state === 'play' && !hid) startScare('caught');
 }
 
@@ -1352,7 +1384,7 @@ function pickup(it) {
 }
 function ambush() {
   showMsg('五枚目……', 2);
-  later(1.0, () => { positional(EXIT.x, 1.5, EXIT.z, (dst) => clank(dst, 1.4)); showMsg('どこかで、扉が開いた', 3); game.unlocked = true; });
+  later(1.0, () => { positional(EXIT.x, 1.5, EXIT.z, (dst) => clank(dst, 1.4)); showMsg('どこかで、扉が開いた', 3); game.unlocked = true; game.unlockAt = game.t; });
   later(4.0, () => { powerDown(); game.lightsOut = true; game.blackout = 1.4; A.amb.gain.setTargetAtTime(0, now(), 0.1); });
   later(5.6, () => {
     if (game.state !== 'play') return;
@@ -1672,9 +1704,27 @@ function update(dt) {
   // 操作ヒント
   const near = game.state === 'play' && !hid ? nearLocker() : null;
   const pr = $('prompt');
+  const chased = st.state === 'chase' || st.state === 'stare';
   if (near) pr.textContent = isTouch ? '' : '［E］ 隠れる';
-  else if (hid && player.hideAnim >= 1 && player.hideDir === 1) pr.textContent = isTouch ? '' : '［Space］息を止める　［Q / 右クリック］覗く　［E］出る';
+  else if (hid && player.hideAnim >= 1 && player.hideDir === 1) pr.textContent = isTouch ? '' : '［E］出る　［Space］息　［Q］覗く';
   else pr.textContent = '';
+  pr.classList.toggle('hot', !!near && chased);
+  if (game.state === 'play') {
+    if (game.t > 2 && game.t < 30 && !player.moved) G('move', 'WASD で移動　マウスで見回す', '左で移動　右で見回す', 5);
+    if (player.moving) player.moved = true;
+    if (game.t > 12 && player.moved && !guideSeen.goal) G('goal', '赤く光る お札を探せ　近づけば剥がせる', '赤く光る お札を探せ　近づけば剥がせる', 4);
+    if (!hid && chased) G('run', 'Shift で走れ', '「走」を押しっぱなしで走れ', 3, 40);
+    if (!hid && chased && near) G('hidenow', '［E］でロッカーに隠れろ', '「隠」でロッカーに隠れろ', 3, 30);
+    if (!hid && player.exhausted && st.state === 'chase') G('tired', '息が切れた ── 隠れる場所を探せ', '息が切れた ── 隠れる場所を探せ', 3, 40);
+    if (hid && player.hideAnim >= 1 && player.hideDir === 1) G('inlocker', 'Space 長押しで息を止める　Q / 右クリックで覗く　E で出る', '「息」長押しで息を止める　「覗」で覗く　「出」で出る', 6);
+    if (hid && st.d < 7 && !player.holding && !player.choking) G('hold', '近い…… 息を止めろ（Space）', '近い…… 「息」で息を止めろ', 2.5, 15);
+    if (hid && player.holding && player.air < 0.3) G('air', 'もう、限界……', 'もう、限界……', 1.5, 12);
+    if (hid && st.d > 18 && player.hideT > 25) G('leave', '……遠ざかった気がする　E で出る', '……遠ざかった気がする　「出」で出る', 3, 60);
+    if (!hid && player.light && player.battery < 0.25) G('batt', '電池が少ない　F で消して節約できる', '電池が少ない　「灯」で消して節約できる', 4, 90);
+    if (!hid && !player.light && player.battery > 0 && game.t > 10 && !chased) G('lightoff', 'F で懐中電灯', '「灯」で懐中電灯', 3, 60);
+    if (!hid && near && !chased) G('locker', '［E］ロッカーに隠れられる', '「隠」でロッカーに隠れられる', 3);
+    if (game.unlocked && !hid && !chased && game.t - (game.unlockAt || game.t) > 12) G('exit', '出口の扉が開いている　急げ', '出口の扉が開いている　急げ', 4);
+  }
   if (isTouch) {
     $('bHide').style.display = near || (hid && player.hideDir === 1) ? 'flex' : 'none';
     $('bHide').textContent = hid ? '出' : '隠';
